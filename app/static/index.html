@@ -1,0 +1,468 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Analyze sentiment of Telugu-English code-mixed text using XLM-RoBERTa / MuRIL fine-tuned on CMTet dataset." />
+  <title>CMTet Sentiment Analyzer | Telugu-English Code-Mix</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Telugu&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0d0f14;
+      --surface: #161a22;
+      --surface2: #1e2330;
+      --border: #2a3045;
+      --accent: #6c63ff;
+      --accent2: #8b83ff;
+      --pos: #22c55e;
+      --neg: #ef4444;
+      --ntl: #94a3b8;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --radius: 16px;
+      --transition: 0.25s cubic-bezier(.4,0,.2,1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', 'Noto Sans Telugu', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem 4rem;
+    }
+
+    /* ── Header ── */
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+      animation: fadeUp 0.6s ease both;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(108,99,255,.15);
+      border: 1px solid rgba(108,99,255,.4);
+      color: var(--accent2);
+      font-size: .7rem;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 100px;
+      margin-bottom: 1rem;
+    }
+    h1 {
+      font-size: clamp(1.6rem, 5vw, 2.6rem);
+      font-weight: 700;
+      background: linear-gradient(135deg, #e2e8f0 30%, var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1.2;
+      margin-bottom: .5rem;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: .9rem;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      width: 100%;
+      max-width: 680px;
+      box-shadow: 0 24px 64px rgba(0,0,0,.4);
+      animation: fadeUp 0.7s ease both;
+      animation-delay: .1s;
+    }
+
+    /* ── Textarea ── */
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: .95rem;
+      padding: 1rem;
+      resize: vertical;
+      transition: border-color var(--transition), box-shadow var(--transition);
+      outline: none;
+    }
+    textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(108,99,255,.2);
+    }
+    .char-count {
+      text-align: right;
+      font-size: .75rem;
+      color: var(--muted);
+      margin-top: 4px;
+      margin-bottom: .75rem;
+    }
+    .char-count.warn { color: #fb923c; }
+    .char-count.error { color: var(--neg); }
+
+    /* ── Button ── */
+    button#analyzeBtn {
+      width: 100%;
+      padding: .85rem;
+      background: linear-gradient(135deg, var(--accent), #a78bfa);
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity var(--transition), transform var(--transition), box-shadow var(--transition);
+      box-shadow: 0 4px 20px rgba(108,99,255,.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    button#analyzeBtn:hover:not(:disabled) {
+      opacity: .9;
+      transform: translateY(-1px);
+      box-shadow: 0 8px 28px rgba(108,99,255,.45);
+    }
+    button#analyzeBtn:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    /* ── Examples ── */
+    .examples-label {
+      font-size: .75rem;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      margin-top: 1.5rem;
+      margin-bottom: .6rem;
+    }
+    .examples {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .5rem;
+    }
+    .example-chip {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .4rem .75rem;
+      font-size: .78rem;
+      color: var(--text);
+      cursor: pointer;
+      transition: border-color var(--transition), background var(--transition);
+      max-width: 100%;
+      white-space: normal;
+      text-align: left;
+    }
+    .example-chip:hover {
+      border-color: var(--accent2);
+      background: rgba(108,99,255,.1);
+    }
+
+    /* ── Result card ── */
+    #result {
+      margin-top: 1.5rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      display: none;
+      animation: fadeUp 0.35s ease both;
+    }
+    #result.visible { display: block; }
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 1.25rem;
+    }
+    .label-badge {
+      font-size: 1.1rem;
+      font-weight: 700;
+      padding: .35rem 1rem;
+      border-radius: 8px;
+      letter-spacing: .04em;
+    }
+    .label-badge.POS { background: rgba(34,197,94,.15); color: var(--pos); border: 1px solid rgba(34,197,94,.3); }
+    .label-badge.NEG { background: rgba(239,68,68,.15);  color: var(--neg); border: 1px solid rgba(239,68,68,.3); }
+    .label-badge.NTL { background: rgba(148,163,184,.15);color: var(--ntl); border: 1px solid rgba(148,163,184,.3); }
+    .result-emoji { font-size: 1.8rem; }
+
+    /* ── Probability bars ── */
+    .prob-list { display: flex; flex-direction: column; gap: .65rem; }
+    .prob-row { display: flex; flex-direction: column; gap: 4px; }
+    .prob-label-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: .8rem;
+      font-weight: 500;
+    }
+    .prob-bar-track {
+      height: 8px;
+      background: var(--border);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+    .prob-bar-fill {
+      height: 100%;
+      border-radius: 100px;
+      transition: width 0.5s cubic-bezier(.4,0,.2,1);
+    }
+    .prob-bar-fill.POS { background: linear-gradient(90deg, #16a34a, var(--pos)); }
+    .prob-bar-fill.NEG { background: linear-gradient(90deg, #dc2626, var(--neg)); }
+    .prob-bar-fill.NTL { background: linear-gradient(90deg, #475569, var(--ntl)); }
+
+    .cleaned-text {
+      margin-top: 1rem;
+      padding: .75rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: .8rem;
+      color: var(--muted);
+    }
+    .cleaned-text span { color: var(--text); font-style: italic; }
+
+    /* ── Error ── */
+    #error-msg {
+      display: none;
+      margin-top: 1rem;
+      background: rgba(239,68,68,.1);
+      border: 1px solid rgba(239,68,68,.3);
+      border-radius: 10px;
+      padding: .75rem 1rem;
+      color: var(--neg);
+      font-size: .85rem;
+    }
+    #error-msg.visible { display: block; }
+
+    /* ── Spinner ── */
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(255,255,255,.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      display: none;
+    }
+    .loading .spinner { display: block; }
+    .loading .btn-text { display: none; }
+
+    /* ── Footer ── */
+    footer {
+      margin-top: 2rem;
+      text-align: center;
+      font-size: .75rem;
+      color: var(--muted);
+      max-width: 620px;
+      line-height: 1.6;
+      animation: fadeUp 0.8s ease both;
+      animation-delay: .2s;
+    }
+    footer a { color: var(--accent2); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 480px) {
+      .card { padding: 1.25rem; }
+      .examples { gap: .4rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="badge">🔬 NLP Research Demo</div>
+  <h1>CMTet Sentiment Analyzer</h1>
+  <p class="subtitle">Telugu–English code-mixed sentiment analysis powered by fine-tuned MuRIL / XLM-RoBERTa</p>
+</header>
+
+<div class="card">
+  <textarea
+    id="inputText"
+    placeholder="Type or paste a Telugu-English comment here…&#10;(e.g. Movie chala bagundhi bro, director genius ga chesthadu! 🔥)"
+    aria-label="Input text for sentiment analysis"
+    maxlength="500"
+  ></textarea>
+  <div class="char-count" id="charCount">0 / 500</div>
+
+  <button id="analyzeBtn" onclick="analyze()">
+    <div class="spinner"></div>
+    <span class="btn-text">✨ Analyze Sentiment</span>
+  </button>
+
+  <div class="examples-label">Try an example</div>
+  <div class="examples" id="examples"></div>
+
+  <div id="result">
+    <div class="result-header">
+      <span class="result-emoji" id="resultEmoji"></span>
+      <span class="label-badge" id="labelBadge"></span>
+    </div>
+    <div class="prob-list" id="probList"></div>
+    <div class="cleaned-text">Cleaned: <span id="cleanedText"></span></div>
+  </div>
+
+  <div id="error-msg"></div>
+</div>
+
+<footer>
+  <strong>About:</strong> Model fine-tuned on the
+  <em>CMTet</em> Telugu-English code-mixed sentiment corpus
+  (<a href="https://aclanthology.org/2021.ranlp-1.89/" target="_blank" rel="noopener">
+    Kusampudi et al., RANLP 2021
+  </a>). Labels: Negative · Neutral · Positive.
+  Model: <code>google/muril-base-cased</code>.
+</footer>
+
+<script>
+  const EXAMPLES = [
+    { text: "Movie chala bagundhi bro, hero acting super chesadu! 🔥", label: "POS" },
+    { text: "Worst movie ever, story ledu, bgm waste, timepass kadu 😡", label: "NEG" },
+    { text: "Release date confirm aindha bro? OTT ki eppudu vastundhi?", label: "NTL" },
+    { text: "Nenu chusi crying chesanu, so emotional movie yaar ❤️", label: "POS" },
+    { text: "@Director_garu inka chethha ga cheyyadam possible kadu anipistundi", label: "NEG" },
+  ];
+
+  const textarea  = document.getElementById("inputText");
+  const charCount = document.getElementById("charCount");
+  const btn       = document.getElementById("analyzeBtn");
+  const result    = document.getElementById("result");
+  const errMsg    = document.getElementById("error-msg");
+
+  // Render example chips
+  const examplesEl = document.getElementById("examples");
+  EXAMPLES.forEach(({ text }) => {
+    const chip = document.createElement("button");
+    chip.className = "example-chip";
+    chip.textContent = text;
+    chip.onclick = () => {
+      textarea.value = text;
+      updateCharCount();
+      analyze();
+    };
+    examplesEl.appendChild(chip);
+  });
+
+  // Char count
+  textarea.addEventListener("input", updateCharCount);
+  function updateCharCount() {
+    const n = textarea.value.length;
+    charCount.textContent = `${n} / 500`;
+    charCount.className = "char-count" + (n > 450 ? (n >= 500 ? " error" : " warn") : "");
+  }
+
+  // Analyze
+  async function analyze() {
+    const text = textarea.value.trim();
+    hideResult();
+    hideError();
+
+    if (!text) { showError("Please enter some text first."); return; }
+    if (text.length > 500) { showError("Text is too long (max 500 characters)."); return; }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      renderResult(data);
+    } catch (e) {
+      showError(e.message || "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Enter key submits
+  textarea.addEventListener("keydown", e => {
+    if (e.key === "Enter" && e.ctrlKey) analyze();
+  });
+
+  function renderResult({ label, display, probs, cleaned }) {
+    const emojis = { POS: "😊", NEG: "😠", NTL: "😐" };
+    document.getElementById("resultEmoji").textContent = emojis[label] || "🤔";
+
+    const badge = document.getElementById("labelBadge");
+    badge.textContent = display;
+    badge.className = `label-badge ${label}`;
+
+    const probList = document.getElementById("probList");
+    probList.innerHTML = "";
+    const ORDER = ["POS", "NEG", "NTL"];
+    const DISPLAY = { POS: "Positive", NEG: "Negative", NTL: "Neutral" };
+    ORDER.forEach(lbl => {
+      const p = probs[lbl] ?? 0;
+      const pct = (p * 100).toFixed(1);
+      const row = document.createElement("div");
+      row.className = "prob-row";
+      row.innerHTML = `
+        <div class="prob-label-row">
+          <span>${DISPLAY[lbl]}</span>
+          <span>${pct}%</span>
+        </div>
+        <div class="prob-bar-track">
+          <div class="prob-bar-fill ${lbl}" style="width:0%"
+               data-target="${pct}%"></div>
+        </div>`;
+      probList.appendChild(row);
+    });
+
+    document.getElementById("cleanedText").textContent = cleaned;
+
+    result.classList.add("visible");
+    // Animate bars after paint
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        document.querySelectorAll(".prob-bar-fill").forEach(el => {
+          el.style.width = el.dataset.target;
+        });
+      });
+    });
+  }
+
+  function setLoading(on) {
+    btn.disabled = on;
+    btn.classList.toggle("loading", on);
+  }
+  function hideResult() { result.classList.remove("visible"); }
+  function hideError()  { errMsg.classList.remove("visible"); }
+  function showError(msg) {
+    errMsg.textContent = "⚠ " + msg;
+    errMsg.classList.add("visible");
+  }
+</script>
+</body>
+</html>
